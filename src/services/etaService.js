@@ -82,34 +82,43 @@ export function calculateObservedRoundDelay(queue) {
 
 /**
  * Calculate remaining consultation time in minutes for the CURRENT patient.
+ * 
+ * Formula:
+ *   expectedDuration = DEFAULT_CONSULTATION_MINUTES + observedDelay
+ *   remainingMinutes = Math.max(0, expectedDuration - elapsedMinutes)
+ * 
  * @param {object} currentQueueEntry - Queue entry object (status === 'CURRENT')
  * @param {Date} [now=new Date()] - Current timestamp
- * @returns {number} Remaining consultation minutes (0 to DEFAULT_CONSULTATION_MINUTES)
+ * @param {number} [observedDelay=0] - Average observed delay in round
+ * @returns {number} Remaining consultation minutes (0 to expectedDuration)
  */
-export function calculateRemainingConsultationMinutes(currentQueueEntry, now = new Date()) {
+export function calculateRemainingConsultationMinutes(currentQueueEntry, now = new Date(), observedDelay = 0) {
+  const safeDelay = typeof observedDelay === 'number' && observedDelay > 0 ? observedDelay : 0;
+  const expectedDuration = DEFAULT_CONSULTATION_MINUTES + safeDelay;
+
   if (!currentQueueEntry || currentQueueEntry.status !== 'CURRENT') {
-    return DEFAULT_CONSULTATION_MINUTES;
+    return expectedDuration;
   }
 
   const startTimeStr = currentQueueEntry.startedAt;
   if (!startTimeStr) {
-    return DEFAULT_CONSULTATION_MINUTES;
+    return expectedDuration;
   }
 
   try {
     const startedAt = new Date(startTimeStr);
     const elapsedMs = now.getTime() - startedAt.getTime();
     
-    // Handle negative elapsed time (e.g. clock skew)
+    // Handle invalid timestamps or clock skew (startedAt in future)
     if (isNaN(elapsedMs) || elapsedMs < 0) {
-      return DEFAULT_CONSULTATION_MINUTES;
+      return expectedDuration;
     }
 
     const elapsedMinutes = Math.floor(elapsedMs / (1000 * 60));
-    return Math.max(0, DEFAULT_CONSULTATION_MINUTES - elapsedMinutes);
+    return Math.max(0, expectedDuration - elapsedMinutes);
   } catch (err) {
     console.warn('[etaService] Failed to parse startedAt timestamp:', err);
-    return DEFAULT_CONSULTATION_MINUTES;
+    return expectedDuration;
   }
 }
 
@@ -153,6 +162,7 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
   }
 
   let accumulatedMinutes = 0;
+  let currentIsOverrun = false;
 
   for (let i = 0; i < queue.length; i++) {
     const entry = queue[i];
@@ -168,15 +178,32 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
         label: 'Completed',
       };
     } else if (entry.status === 'CURRENT') {
-      const remainingMinutes = calculateRemainingConsultationMinutes(entry, now);
+      const remainingMinutes = calculateRemainingConsultationMinutes(entry, now, observedDelay);
       accumulatedMinutes = remainingMinutes;
+
+      // Calculate elapsed minutes for transparent overrun labeling
+      let elapsedMinutes = 0;
+      if (entry.startedAt) {
+        const startMs = new Date(entry.startedAt).getTime();
+        const nowMs = now.getTime();
+        if (!isNaN(startMs) && nowMs >= startMs) {
+          elapsedMinutes = Math.floor((nowMs - startMs) / (1000 * 60));
+        }
+      }
+
+      currentIsOverrun = elapsedMinutes >= adjustedConsultationMinutes;
+      const remainingLabel = currentIsOverrun
+        ? `Extended consultation (~${elapsedMinutes} min elapsed)`
+        : `Estimated remaining: ~${remainingMinutes} min`;
 
       etaMap[entry.roundPatientId] = {
         patientId: entry.patientId,
         status: 'CURRENT',
         etaMinutes: remainingMinutes,
         label: 'Being visited now',
-        remainingLabel: `Estimated remaining: ~${remainingMinutes} min`,
+        remainingLabel,
+        isOverrun: currentIsOverrun,
+        elapsedMinutes,
       };
     } else if (entry.status === 'WAITING') {
       // Preceding patient in queue
@@ -193,11 +220,25 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
         explanation = `Adjusted +${observedDelay} min based on current round pace`;
       }
 
+      const isImmediateAfterOverrun = prevEntry?.status === 'CURRENT' && currentIsOverrun;
+
+      let waitLabel;
+      if (isImmediateAfterOverrun && waitMinutes <= 0) {
+        // Transparent status when previous visit is still running long
+        waitLabel = 'Current visit in progress';
+      } else if (waitMinutes <= 0) {
+        waitLabel = 'Doctor arriving shortly';
+      } else if (waitMinutes === 1) {
+        waitLabel = 'Doctor arriving shortly (~1 min)';
+      } else {
+        waitLabel = `Estimated wait: ~${waitMinutes} min`;
+      }
+
       etaMap[entry.roundPatientId] = {
         patientId: entry.patientId,
         status: 'WAITING',
         etaMinutes: waitMinutes,
-        label: `Estimated wait: ~${waitMinutes} min`,
+        label: waitLabel,
         explanation,
         delayMinutes: observedDelay,
       };
