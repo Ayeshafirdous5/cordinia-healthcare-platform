@@ -4,6 +4,7 @@ import Card from '../../components/common/Card';
 import Badge from '../../components/common/Badge';
 import StatusIndicator from '../../components/common/StatusIndicator';
 import Button from '../../components/common/Button';
+import NotificationCenter from '../../components/common/NotificationCenter';
 
 import { getPatients } from '../../services/patientService';
 import { getStaffData } from '../../services/clinicalStaffService';
@@ -360,6 +361,11 @@ export default function PatientDashboard() {
           </div>
         )}
       </Card>
+
+      {/* ── NOTIFICATION CENTER (PART 6A) ── */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <NotificationCenter recipientType="patient" recipientId={patient.patientId} />
+      </div>
 
       {/* Admission Details & Care Team Summary Card */}
       <Card>

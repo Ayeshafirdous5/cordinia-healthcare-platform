@@ -653,3 +653,262 @@
 .staff-table tr:hover td {
   background-color: #f8fafc;
 }
+
+/* =========================================
+   NOTIFICATION CENTER  (Part 6A)
+   ========================================= */
+
+/* Wrapper — relative so the panel can anchor to it */
+.nc-root {
+  position: relative;
+}
+
+/* ── Trigger button ───────────────────────────────────────── */
+.nc-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.5rem 0.875rem;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-brand-navy);
+  background-color: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+
+.nc-trigger:hover {
+  background-color: var(--color-bg-muted);
+  border-color: var(--color-border-strong);
+}
+
+.nc-bell {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* Unread count pill */
+.nc-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: #fff;
+  background-color: var(--color-rose);
+  border-radius: var(--radius-full);
+}
+
+/* ── Panel ────────────────────────────────────────────────── */
+.nc-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 200;
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.nc-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background-color: var(--color-bg-subtle);
+}
+
+.nc-panel-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-navy);
+}
+
+/* ── List ─────────────────────────────────────────────────── */
+.nc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.nc-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  transition: background-color 0.1s;
+}
+
+.nc-item:last-child {
+  border-bottom: none;
+}
+
+.nc-item:hover {
+  background-color: var(--color-bg-subtle);
+}
+
+/* Unread items get a light left accent */
+.nc-item-unread {
+  background-color: var(--color-brand-primary-light);
+  border-left: 3px solid var(--color-brand-primary);
+}
+
+.nc-item-unread:hover {
+  background-color: #d0eafc;
+}
+
+/* Important priority gets an amber left accent */
+.nc-item-important.nc-item-unread {
+  background-color: var(--color-amber-light);
+  border-left-color: var(--color-amber);
+}
+
+.nc-item-important.nc-item-unread:hover {
+  background-color: #fde68a;
+}
+
+.nc-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.nc-item-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.nc-priority-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--color-amber);
+  flex-shrink: 0;
+}
+
+.nc-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--color-brand-primary);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.nc-item-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-navy);
+  line-height: 1.3;
+}
+
+.nc-item-message {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+  word-break: break-word;
+}
+
+.nc-item-time {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Per-item action buttons ──────────────────────────────── */
+.nc-item-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.nc-action-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.nc-action-link:hover {
+  color: var(--color-brand-primary-hover);
+}
+
+.nc-action-delete {
+  color: var(--color-rose);
+  text-decoration: none;
+  font-size: 0.75rem;
+}
+
+.nc-action-delete:hover {
+  color: #be0035;
+}
+
+/* ── Empty state ──────────────────────────────────────────── */
+.nc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.nc-empty-icon {
+  font-size: 1.75rem;
+  opacity: 0.5;
+}
+
+.nc-empty-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-navy);
+  margin: 0;
+}
+
+.nc-empty-sub {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .nc-panel {
+    right: -0.5rem;
+    width: calc(100vw - 1rem);
+  }
+
+  .nc-label {
+    display: none;
+  }
+}

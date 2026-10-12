@@ -13,6 +13,8 @@
 
 import { getPatients } from './patientService';
 import { getHospitalStructure } from './hospitalStructureService';
+import { getStaffData } from './clinicalStaffService';
+import { createNotification } from './notificationService';
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
@@ -96,6 +98,18 @@ function saveRoundPatients(entries) {
 
 function generateId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+}
+
+function getDoctorLabel(doctorId) {
+  try {
+    const staff = getStaffData();
+    const doc = staff.doctors.find((d) => d.doctorId === doctorId);
+    if (!doc) return 'Your attending physician';
+    return doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`;
+  } catch (err) {
+    console.warn('[roundService] Failed to get doctor label for notifications:', err);
+    return 'Your attending physician';
+  }
 }
 
 // ─── Queue generation (isolated, replaceable) ─────────────────────────────────
@@ -241,6 +255,40 @@ export function startRound(doctorId) {
   allQueue.push(...queueEntries);
   saveRoundPatients(allQueue);
 
+  // ── Dispatch notifications for newly started round (Part 6B) ──
+  try {
+    const docLabel = getDoctorLabel(doctorId);
+    queueEntries.forEach((entry, idx) => {
+      // 1. Rounds started notification for all assigned patients in this round
+      createNotification({
+        recipientType: 'patient',
+        recipientId: entry.patientId,
+        type: 'ROUND_STARTED',
+        title: 'Doctor rounds started',
+        message: `${docLabel} has started rounds for your care area.`,
+        priority: 'info',
+        roundId: round.roundId,
+        eventId: `ROUND_STARTED_${round.roundId}_${entry.patientId}`,
+      });
+
+      // 2. Initial CURRENT patient notification
+      if (idx === 0) {
+        createNotification({
+          recipientType: 'patient',
+          recipientId: entry.patientId,
+          type: 'QUEUE_PROGRESS',
+          title: 'Doctor visiting now',
+          message: `${docLabel} is now visiting you at your bedside.`,
+          priority: 'important',
+          roundId: round.roundId,
+          eventId: `QUEUE_PROGRESS_${round.roundId}_${entry.patientId}_CURRENT`,
+        });
+      }
+    });
+  } catch (notifErr) {
+    console.warn('[roundService] Failed to dispatch startRound notifications:', notifErr);
+  }
+
   return {
     round,
     queue: queueEntries,
@@ -311,6 +359,62 @@ export function advanceRound(roundId) {
 
   saveRounds(rounds);
   saveRoundPatients(allQueue);
+
+  // ── Dispatch notifications for visit completion and queue progress (Part 6B) ──
+  try {
+    const activeRoundRecord = rounds[roundIdx];
+    const docLabel = getDoctorLabel(activeRoundRecord?.doctorId);
+
+    // 1. Visit completed notification for the patient who was just finished
+    if (currentIdx !== -1) {
+      const completedEntry = roundQueue[currentIdx];
+      if (completedEntry?.patientId) {
+        createNotification({
+          recipientType: 'patient',
+          recipientId: completedEntry.patientId,
+          type: 'VISIT_COMPLETED',
+          title: 'Doctor visit completed',
+          message: `Your bedside visit with ${docLabel} has been completed.`,
+          priority: 'info',
+          roundId,
+          eventId: `VISIT_COMPLETED_${roundId}_${completedEntry.patientId}`,
+        });
+      }
+    }
+
+    // 2. Queue progress notification for the patient who is now CURRENT
+    if (nextEntry?.patientId) {
+      createNotification({
+        recipientType: 'patient',
+        recipientId: nextEntry.patientId,
+        type: 'QUEUE_PROGRESS',
+        title: 'Doctor visiting now',
+        message: `${docLabel} is now visiting you at your bedside.`,
+        priority: 'important',
+        roundId,
+        eventId: `QUEUE_PROGRESS_${roundId}_${nextEntry.patientId}_CURRENT`,
+      });
+
+      // 3. Queue progress notification for the patient who is now NEXT in queue (1 ahead)
+      const upcomingEntry = roundQueue.find(
+        (rp) => rp.sequence === nextEntry.sequence + 1 && rp.status === 'WAITING'
+      );
+      if (upcomingEntry?.patientId) {
+        createNotification({
+          recipientType: 'patient',
+          recipientId: upcomingEntry.patientId,
+          type: 'QUEUE_PROGRESS',
+          title: 'Doctor visiting next',
+          message: `You are next in queue. ${docLabel} will visit you after the current patient.`,
+          priority: 'info',
+          roundId,
+          eventId: `QUEUE_PROGRESS_${roundId}_${upcomingEntry.patientId}_UPCOMING`,
+        });
+      }
+    }
+  } catch (notifErr) {
+    console.warn('[roundService] Failed to dispatch advanceRound notifications:', notifErr);
+  }
 
   const updatedQueue = allQueue
     .filter((rp) => rp.roundId === roundId)
