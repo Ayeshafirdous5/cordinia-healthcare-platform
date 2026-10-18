@@ -123,6 +123,46 @@ export function calculateRemainingConsultationMinutes(currentQueueEntry, now = n
 }
 
 /**
+ * Calculate the active consultation overrun in minutes for the CURRENT patient.
+ * Keeps completed-visit observed delay separate from active-consultation overrun.
+ * Returns 0 if consultation is within expected duration or timestamps are missing/invalid/future.
+ *
+ * @param {object} currentQueueEntry - Queue entry with status === 'CURRENT'
+ * @param {Date} [now=new Date()] - Current timestamp
+ * @param {number} [observedDelay=0] - Completed visits observed delay
+ * @returns {number} Whole minutes over expected duration (>= 0)
+ */
+export function calculateActiveConsultationOverrun(currentQueueEntry, now = new Date(), observedDelay = 0) {
+  if (!currentQueueEntry || currentQueueEntry.status !== 'CURRENT') {
+    return 0;
+  }
+
+  const startTimeStr = currentQueueEntry.startedAt;
+  if (!startTimeStr) {
+    return 0;
+  }
+
+  try {
+    const startedAt = new Date(startTimeStr);
+    const elapsedMs = now.getTime() - startedAt.getTime();
+
+    // Guard against invalid timestamp or clock skew (startedAt in future)
+    if (isNaN(elapsedMs) || elapsedMs < 0) {
+      return 0;
+    }
+
+    const elapsedMinutes = Math.floor(elapsedMs / (1000 * 60));
+    const safeDelay = typeof observedDelay === 'number' && observedDelay > 0 ? observedDelay : 0;
+    const expectedDuration = DEFAULT_CONSULTATION_MINUTES + safeDelay;
+
+    return Math.max(0, elapsedMinutes - expectedDuration);
+  } catch (err) {
+    console.warn('[etaService] Failed to calculate active overrun:', err);
+    return 0;
+  }
+}
+
+/**
  * Calculate floor transition time in minutes between two patients.
  * Adds DEFAULT_FLOOR_TRANSITION_MINUTES if moving to a different floor.
  * 
@@ -146,11 +186,17 @@ export function calculateFloorTransitionMinutes(fromPatient, toPatient, structur
 /**
  * Calculate ETAs and delay intelligence for all queue entries in an active round.
  * 
+ * Part 7B Refinement:
+ *   - Keeps completed-visit observed delay separate from active-consultation overrun.
+ *   - Exposes activeOverrunMinutes on the return object and within each queue entry.
+ *   - Explanations for waiting patients transparently identify active overruns without
+ *     blindly compounding the single overrun into future patients' baselines.
+ *
  * @param {Array} queue - Sorted array of RoundPatientRecord
  * @param {Array} patients - Array of PatientRecord
  * @param {object} structure - Hospital structure
  * @param {Date} [now=new Date()] - Current timestamp
- * @returns {{ etaMap: Object.<string, { patientId: string, status: string, etaMinutes: number|null, label: string, remainingLabel?: string, explanation?: string }>, observedDelay: number }}
+ * @returns {{ etaMap: Object.<string, { patientId: string, status: string, etaMinutes: number|null, label: string, remainingLabel?: string, explanation?: string, activeOverrunMinutes?: number }>, observedDelay: number, activeOverrunMinutes: number }}
  */
 export function calculateQueueEtas(queue, patients = [], structure = {}, now = new Date()) {
   const etaMap = {};
@@ -158,8 +204,14 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
   const adjustedConsultationMinutes = DEFAULT_CONSULTATION_MINUTES + observedDelay;
 
   if (!Array.isArray(queue) || queue.length === 0) {
-    return { etaMap, observedDelay: 0 };
+    return { etaMap, observedDelay: 0, activeOverrunMinutes: 0 };
   }
+
+  // Derive active consultation overrun separately from completed visits (Part 7B)
+  const currentEntry = queue.find((entry) => entry.status === 'CURRENT');
+  const activeOverrunMinutes = currentEntry
+    ? calculateActiveConsultationOverrun(currentEntry, now, observedDelay)
+    : 0;
 
   let accumulatedMinutes = 0;
   let currentIsOverrun = false;
@@ -191,7 +243,7 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
         }
       }
 
-      currentIsOverrun = elapsedMinutes >= adjustedConsultationMinutes;
+      currentIsOverrun = activeOverrunMinutes > 0;
       const remainingLabel = currentIsOverrun
         ? `Extended consultation (~${elapsedMinutes} min elapsed)`
         : `Estimated remaining: ~${remainingMinutes} min`;
@@ -203,6 +255,7 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
         label: 'Being visited now',
         remainingLabel,
         isOverrun: currentIsOverrun,
+        activeOverrunMinutes,
         elapsedMinutes,
       };
     } else if (entry.status === 'WAITING') {
@@ -215,8 +268,13 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
 
       const waitMinutes = accumulatedMinutes;
 
+      // Transparent explanations combining completed delay and active overrun (Part 7B)
       let explanation = null;
-      if (observedDelay > 0) {
+      if (activeOverrunMinutes > 0 && observedDelay > 0) {
+        explanation = `Current visit running +${activeOverrunMinutes} min · Completed visits pace +${observedDelay} min`;
+      } else if (activeOverrunMinutes > 0) {
+        explanation = `Current bedside visit running +${activeOverrunMinutes} min over expected time`;
+      } else if (observedDelay > 0) {
         explanation = `Adjusted +${observedDelay} min based on current round pace`;
       }
 
@@ -224,7 +282,7 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
 
       let waitLabel;
       if (isImmediateAfterOverrun && waitMinutes <= 0) {
-        // Transparent status when previous visit is still running long
+        // Transparent status when previous visit is still running long on same floor
         waitLabel = 'Current visit in progress';
       } else if (waitMinutes <= 0) {
         waitLabel = 'Doctor arriving shortly';
@@ -241,12 +299,15 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
         label: waitLabel,
         explanation,
         delayMinutes: observedDelay,
+        activeOverrunMinutes,
       };
 
       // Accumulate adjusted consultation time for subsequent waiting patients
+      // Conservative explainable rule: future patients use completed-visit pace (DEFAULT + observedDelay)
+      // rather than compounding the single active visit's overrun across every future patient.
       accumulatedMinutes += adjustedConsultationMinutes;
     }
   }
 
-  return { etaMap, observedDelay };
+  return { etaMap, observedDelay, activeOverrunMinutes };
 }

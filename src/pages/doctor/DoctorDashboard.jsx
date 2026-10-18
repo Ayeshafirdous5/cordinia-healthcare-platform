@@ -232,7 +232,7 @@ export default function DoctorDashboard() {
   const totalCount = queue.length;
 
   // Calculate ETAs and delay intelligence for all queue entries
-  const { etaMap: queueEtas, observedDelay } = calculateQueueEtas(queue, patients, structure, now);
+  const { etaMap: queueEtas, observedDelay, activeOverrunMinutes } = calculateQueueEtas(queue, patients, structure, now);
 
   // ── Inline message colours ─────────────────────────────────────────────────
 
@@ -570,9 +570,15 @@ export default function DoctorDashboard() {
                   <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', fontWeight: '500' }}>
                     Progress
                   </span>
-                  {completedCount > 0 && (
-                    <Badge variant={observedDelay > 0 ? 'amber' : 'teal'}>
-                      {observedDelay > 0 ? `Observed round delay: +${observedDelay} min/patient` : 'Round pace: On baseline'}
+                  {(completedCount > 0 || (activeOverrunMinutes && activeOverrunMinutes > 0)) && (
+                    <Badge variant={observedDelay > 0 || (activeOverrunMinutes && activeOverrunMinutes > 0) ? 'amber' : 'teal'}>
+                      {activeOverrunMinutes > 0 && observedDelay > 0
+                        ? `Round delay: +${observedDelay} min/patient (Current visit +${activeOverrunMinutes} min)`
+                        : activeOverrunMinutes > 0
+                        ? `Current visit extended (+${activeOverrunMinutes} min)`
+                        : observedDelay > 0
+                        ? `Observed round delay: +${observedDelay} min/patient`
+                        : 'Round pace: On baseline'}
                     </Badge>
                   )}
                 </div>

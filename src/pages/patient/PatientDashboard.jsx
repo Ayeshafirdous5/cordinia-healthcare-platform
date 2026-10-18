@@ -103,7 +103,7 @@ export default function PatientDashboard() {
 
       // Calculate ETAs
       const now = new Date();
-      const { etaMap, observedDelay } = calculateQueueEtas(queue, patients, structure, now);
+      const { etaMap, observedDelay, activeOverrunMinutes } = calculateQueueEtas(queue, patients, structure, now);
       const etaInfo = patientEntry ? etaMap[patientEntry.roundPatientId] || null : null;
 
       // Calculate patients ahead (non-completed queue items before patient's position)
@@ -125,6 +125,7 @@ export default function PatientDashboard() {
         totalCount,
         etaInfo,
         observedDelay,
+        activeOverrunMinutes,
         isRoundActive,
       });
 
@@ -263,8 +264,8 @@ export default function PatientDashboard() {
               </div>
             </div>
 
-            {/* Delay Intelligence Note if observed delay > 0 */}
-            {roundState.observedDelay > 0 && (
+            {/* Delay Intelligence Note if observed delay or active overrun > 0 */}
+            {(roundState.observedDelay > 0 || (roundState.activeOverrunMinutes && roundState.activeOverrunMinutes > 0)) && (
               <div
                 style={{
                   backgroundColor: '#fef3c7',
@@ -281,7 +282,11 @@ export default function PatientDashboard() {
               >
                 <span>⏱</span>
                 <span>
-                  ETA adjusted by ~{roundState.observedDelay} min based on current round pace.
+                  {roundState.activeOverrunMinutes > 0 && roundState.observedDelay > 0
+                    ? `Current bedside visit is running +${roundState.activeOverrunMinutes} min long · Completed visits averaging +${roundState.observedDelay} min delay.`
+                    : roundState.activeOverrunMinutes > 0
+                    ? `Current bedside visit is taking longer than usual (+${roundState.activeOverrunMinutes} min). Next arrivals will follow immediately upon completion.`
+                    : `ETA adjusted by ~${roundState.observedDelay} min based on current round pace.`}
                 </span>
               </div>
             )}
