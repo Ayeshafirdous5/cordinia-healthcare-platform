@@ -264,8 +264,8 @@ export default function PatientDashboard() {
               </div>
             </div>
 
-            {/* Delay Intelligence Note if observed delay or active overrun > 0 */}
-            {(roundState.observedDelay > 0 || (roundState.activeOverrunMinutes && roundState.activeOverrunMinutes > 0)) && (
+            {/* Delay Intelligence Note if explanation is available (Part 7C) */}
+            {Boolean(roundState.etaInfo?.explanation) && (
               <div
                 style={{
                   backgroundColor: '#fef3c7',
@@ -281,13 +281,7 @@ export default function PatientDashboard() {
                 }}
               >
                 <span>⏱</span>
-                <span>
-                  {roundState.activeOverrunMinutes > 0 && roundState.observedDelay > 0
-                    ? `Current bedside visit is running +${roundState.activeOverrunMinutes} min long · Completed visits averaging +${roundState.observedDelay} min delay.`
-                    : roundState.activeOverrunMinutes > 0
-                    ? `Current bedside visit is taking longer than usual (+${roundState.activeOverrunMinutes} min). Next arrivals will follow immediately upon completion.`
-                    : `ETA adjusted by ~${roundState.observedDelay} min based on current round pace.`}
-                </span>
+                <span>{roundState.etaInfo.explanation}</span>
               </div>
             )}
           </div>

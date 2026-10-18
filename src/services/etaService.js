@@ -215,6 +215,7 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
 
   let accumulatedMinutes = 0;
   let currentIsOverrun = false;
+  let firstWaitingSeen = false;
 
   for (let i = 0; i < queue.length; i++) {
     const entry = queue[i];
@@ -268,14 +269,21 @@ export function calculateQueueEtas(queue, patients = [], structure = {}, now = n
 
       const waitMinutes = accumulatedMinutes;
 
-      // Transparent explanations combining completed delay and active overrun (Part 7B)
+      const isImmediateNext = !firstWaitingSeen;
+      firstWaitingSeen = true;
+
+      // Position-aware transparent explanations (Part 7C)
       let explanation = null;
+      const positionSuffix = isImmediateNext
+        ? (currentEntry ? 'You are next in the queue once the current visit is complete.' : 'You are next in the queue.')
+        : 'Visits are progressing in queue order.';
+
       if (activeOverrunMinutes > 0 && observedDelay > 0) {
-        explanation = `Current visit running +${activeOverrunMinutes} min · Completed visits pace +${observedDelay} min`;
+        explanation = `Current visit running +${activeOverrunMinutes} min · Completed visits pace +${observedDelay} min · ${positionSuffix}`;
       } else if (activeOverrunMinutes > 0) {
-        explanation = `Current bedside visit running +${activeOverrunMinutes} min over expected time`;
+        explanation = `Current visit running +${activeOverrunMinutes} min · ${positionSuffix}`;
       } else if (observedDelay > 0) {
-        explanation = `Adjusted +${observedDelay} min based on current round pace`;
+        explanation = `Adjusted +${observedDelay} min based on current round pace · ${positionSuffix}`;
       }
 
       const isImmediateAfterOverrun = prevEntry?.status === 'CURRENT' && currentIsOverrun;
