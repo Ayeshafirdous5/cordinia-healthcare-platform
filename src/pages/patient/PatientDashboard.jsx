@@ -93,8 +93,19 @@ export default function PatientDashboard() {
       const queue = getQueueForRound(targetRound.roundId);
       const patientEntry = queue.find((q) => q.patientId === currentPatient.patientId) || null;
 
-      if (!patientEntry && !isRoundActive) {
-        setRoundState(null);
+      if (!patientEntry) {
+        if (!isRoundActive) {
+          setRoundState(null);
+          return;
+        }
+
+        // Active round exists, but this patient is not present in the active round queue
+        setRoundState({
+          round: targetRound,
+          patientEntry: null,
+          isNotQueuedInActiveRound: true,
+          isRoundActive: true,
+        });
         return;
       }
 
@@ -119,7 +130,7 @@ export default function PatientDashboard() {
         round: targetRound,
         queue,
         patientEntry,
-        status: patientEntry ? patientEntry.status : (isRoundActive ? 'WAITING' : 'COMPLETED'),
+        status: patientEntry.status,
         patientsAhead,
         completedCount,
         totalCount,
@@ -196,22 +207,25 @@ export default function PatientDashboard() {
           <h2 style={{ fontSize: 'var(--font-size-lg)', color: 'var(--color-brand-navy)' }}>
             Doctor Round Status
           </h2>
-          {roundState && roundState.isRoundActive && roundState.status === 'CURRENT' && (
+          {roundState?.isNotQueuedInActiveRound && (
+            <StatusIndicator status="pending" label="Not in Current Queue" />
+          )}
+          {roundState && !roundState.isNotQueuedInActiveRound && roundState.isRoundActive && roundState.status === 'CURRENT' && (
             <StatusIndicator status="active" label="Visiting You Now" />
           )}
-          {roundState && roundState.isRoundActive && roundState.status === 'WAITING' && (
+          {roundState && !roundState.isNotQueuedInActiveRound && roundState.isRoundActive && roundState.status === 'WAITING' && (
             <StatusIndicator status="info" label="Rounds In Progress" />
           )}
-          {roundState && roundState.status === 'COMPLETED' && (
+          {roundState && !roundState.isNotQueuedInActiveRound && roundState.status === 'COMPLETED' && (
             <Badge variant="teal">Visit Complete</Badge>
           )}
-          {(!roundState || (!roundState.isRoundActive && roundState.status !== 'COMPLETED')) && (
+          {(!roundState || (!roundState.isRoundActive && roundState.status !== 'COMPLETED')) && !roundState?.isNotQueuedInActiveRound && (
             <StatusIndicator status="pending" label="Rounds Standby" />
           )}
         </div>
 
         {/* State A: No Active Round */}
-        {(!roundState || (!roundState.isRoundActive && roundState.status !== 'COMPLETED')) && (
+        {(!roundState || (!roundState.isRoundActive && roundState.status !== 'COMPLETED')) && !roundState?.isNotQueuedInActiveRound && (
           <div style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏱</div>
             <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: '700', color: 'var(--color-brand-navy)', marginBottom: '0.4rem' }}>
@@ -219,6 +233,19 @@ export default function PatientDashboard() {
             </h3>
             <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.5 }}>
               Your attending physician {doctor ? <strong>{doctor.name}</strong> : 'team'} has not initiated rounds yet. Arrival estimates will appear here automatically once rounds begin.
+            </p>
+          </div>
+        )}
+
+        {/* State A2: Active Round but Patient Not In Queue */}
+        {roundState?.isNotQueuedInActiveRound && (
+          <div style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📋</div>
+            <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: '700', color: 'var(--color-brand-navy)', marginBottom: '0.4rem' }}>
+              Not currently included in active rounds
+            </h3>
+            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', maxWidth: '520px', margin: '0 auto', lineHeight: 1.5 }}>
+              Dr. {doctor ? doctor.name : 'Your attending physician'} is currently conducting rounds, but your record is not in the active queue for this round. Please contact your ward nurse or care team to confirm your assignment and round schedule.
             </p>
           </div>
         )}
