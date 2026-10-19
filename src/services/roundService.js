@@ -284,6 +284,20 @@ export function startRound(doctorId) {
           eventId: `QUEUE_PROGRESS_${round.roundId}_${entry.patientId}_CURRENT`,
         });
       }
+
+      // 3. Initial NEXT patient notification (Part 7D Priority 2)
+      if (idx === 1) {
+        createNotification({
+          recipientType: 'patient',
+          recipientId: entry.patientId,
+          type: 'QUEUE_PROGRESS',
+          title: 'Doctor visiting next',
+          message: `You are next in queue. ${docLabel} will visit you after the current patient.`,
+          priority: 'info',
+          roundId: round.roundId,
+          eventId: `QUEUE_PROGRESS_${round.roundId}_${entry.patientId}_UPCOMING`,
+        });
+      }
     });
   } catch (notifErr) {
     console.warn('[roundService] Failed to dispatch startRound notifications:', notifErr);
