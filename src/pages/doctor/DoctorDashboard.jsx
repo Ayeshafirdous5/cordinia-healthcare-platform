@@ -60,6 +60,43 @@ function PatientLocationLine({ patient, structure }) {
   );
 }
 
+// ── Helpers for stable state comparisons (Part 7D Priority 3) ───────────────
+
+function isSameRound(r1, r2) {
+  if (r1 === r2) return true;
+  if (!r1 || !r2) return false;
+  return (
+    r1.roundId === r2.roundId &&
+    r1.doctorId === r2.doctorId &&
+    r1.status === r2.status &&
+    r1.currentPatientId === r2.currentPatientId &&
+    r1.startedAt === r2.startedAt &&
+    r1.endedAt === r2.endedAt
+  );
+}
+
+function isSameQueue(q1, q2) {
+  if (q1 === q2) return true;
+  if (!Array.isArray(q1) || !Array.isArray(q2)) return false;
+  if (q1.length !== q2.length) return false;
+  for (let i = 0; i < q1.length; i++) {
+    const a = q1[i];
+    const b = q2[i];
+    if (
+      a.roundPatientId !== b.roundPatientId ||
+      a.patientId !== b.patientId ||
+      a.status !== b.status ||
+      a.sequence !== b.sequence ||
+      a.startedAt !== b.startedAt ||
+      a.completedAt !== b.completedAt ||
+      a.actualDurationMinutes !== b.actualDurationMinutes
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DoctorDashboard() {
@@ -106,18 +143,18 @@ export default function DoctorDashboard() {
 
   const loadRoundState = useCallback((doctorId) => {
     if (!doctorId) {
-      setActiveRound(null);
-      setQueue([]);
-      setRoundCompleted(false);
+      setActiveRound((prev) => (prev === null ? prev : null));
+      setQueue((prev) => (prev.length === 0 ? prev : []));
+      setRoundCompleted((prev) => (!prev ? prev : false));
       return;
     }
     // Check for an in-progress (ACTIVE) round first
     const existing = getActiveRound(doctorId);
     if (existing) {
       const q = getQueueForRound(existing.roundId);
-      setActiveRound(existing);
-      setQueue(q);
-      setRoundCompleted(false);
+      setActiveRound((prev) => (isSameRound(prev, existing) ? prev : existing));
+      setQueue((prev) => (isSameQueue(prev, q) ? prev : q));
+      setRoundCompleted((prev) => (!prev ? prev : false));
       return;
     }
     // Check if the most-recent round for this doctor is COMPLETED
@@ -129,19 +166,48 @@ export default function DoctorDashboard() {
     const lastCompleted = doctorRounds[0] || null;
     if (lastCompleted) {
       const q = getQueueForRound(lastCompleted.roundId);
-      setActiveRound(lastCompleted);
-      setQueue(q);
-      setRoundCompleted(true);
+      setActiveRound((prev) => (isSameRound(prev, lastCompleted) ? prev : lastCompleted));
+      setQueue((prev) => (isSameQueue(prev, q) ? prev : q));
+      setRoundCompleted((prev) => (prev === true ? prev : true));
       return;
     }
     // No rounds at all
-    setActiveRound(null);
-    setQueue([]);
-    setRoundCompleted(false);
+    setActiveRound((prev) => (prev === null ? prev : null));
+    setQueue((prev) => (prev.length === 0 ? prev : []));
+    setRoundCompleted((prev) => (!prev ? prev : false));
   }, []);
+
+  // ── Restore round on mount / doctor change & cross-tab sync (Part 7D Priority 3) ──
 
   useEffect(() => {
     loadRoundState(selectedDoctorId);
+
+    if (!selectedDoctorId) return;
+
+    let isSyncing = false;
+    const sync = () => {
+      if (isSyncing) return;
+      isSyncing = true;
+      try {
+        loadRoundState(selectedDoctorId);
+      } finally {
+        isSyncing = false;
+      }
+    };
+
+    const handleStorage = (e) => {
+      if (!e.key || e.key === 'cordinia_doctor_rounds' || e.key === 'cordinia_round_patients') {
+        sync();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    const interval = setInterval(sync, 3000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
   }, [selectedDoctorId, loadRoundState]);
 
   // ── Doctor selection ───────────────────────────────────────────────────────
